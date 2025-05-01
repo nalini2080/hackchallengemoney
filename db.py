@@ -20,13 +20,10 @@ class DatabaseDriver(object):
     """
 
     def __init__(self):
-        """
-        Securing database connection and storing it into instance variable conn
-        """
-        self.conn = sqlite3.connect (
-            "venmo.db", check_same_thread=False
-        )
+        self.conn = sqlite3.connect("venmo.db", check_same_thread=False)
+        self.conn.execute("PRAGMA foreign_keys = ON;")
         self.create_user_table()
+        self.create_transaction_table()
 
     def create_user_table(self):
         """
@@ -35,18 +32,49 @@ class DatabaseDriver(object):
         self.conn.execute("""
         CREATE TABLE IF NOT EXISTS user (
                           id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          userid TEXT NOT NULL,
                           name TEXT NOT NULL, 
                           username TEXT NOT NULL,
                           balance DOUBLE NOT NULL
                             );
         """
         )
+    def create_transaction_table(self):
+        self.conn.execute("""CREATE TABLE IF NOT EXISTS transaction (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaction_name TEXT NOT NULL
+    sender_id TEXT NOT NULL,
+    receiver_id TEXT NOT NULL,
+    amount DOUBLE NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sender_id) REFERENCES user(userid),
+    FOREIGN KEY (receiver_id) REFERENCES user(userid)
+);
+""")
+    def insert_transaction(self, sender_id, receiver_id, amount):
+        """
+        Insert a transaction record
+        """
+        cursor = self.conn.execute("""
+            INSERT INTO transaction (sender_id, receiver_id, amount)
+            VALUES (?, ?, ?);
+        """, (sender_id, receiver_id, amount))
+        self.conn.commit()
+        return cursor.lastrowid
+    def get_userid_by_username():
+        """
+        Get the userid by username
+        """
+        cursor = self.conn.execute("SELECT userid FROM user WHERE username = ?;", (username,))
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+        return None
     def delete_user_table(self):
         """
         Deleting user table using SQL
         """
         self.conn.execute("DROP TABLE IF EXISTS user;")
-    
     def get_all_users(self):
         """
         Using SQL, returns all users in table
