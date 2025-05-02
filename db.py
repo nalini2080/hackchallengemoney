@@ -35,7 +35,8 @@ class DatabaseDriver(object):
                           userid TEXT UNIQUE NOT NULL,
                           name TEXT NOT NULL, 
                           username TEXT NOT NULL,
-                          balance DOUBLE NOT NULL
+                          balance DOUBLE NOT NULL,
+                          initial_balance DOUBLE NOT NULL DEFAULT 0
                             );
         """
         )
@@ -47,18 +48,19 @@ class DatabaseDriver(object):
     receiver_id TEXT NOT NULL,
     amount DOUBLE NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    category TEXT NOT NULL,
     FOREIGN KEY (sender_id) REFERENCES user(userid),
     FOREIGN KEY (receiver_id) REFERENCES user(userid)
 );
 """)
-    def insert_transaction(self, sender_id, receiver_id, amount):
+    def insert_transaction(self, transaction_name, sender_id, receiver_id, amount, category):
         """
         Insert a transaction record
         """
         cursor = self.conn.execute("""
-            INSERT INTO transaction (sender_id, receiver_id, amount)
-            VALUES (?, ?, ?);
-        """, (sender_id, receiver_id, amount))
+            INSERT INTO transaction (transaction_name, sender_id, receiver_id, amount, category)
+            VALUES (?. ?, ?, ?);
+        """, (transaction_name, sender_id, receiver_id, amount, category))
         self.conn.commit()
         return cursor.lastrowid
     def get_all_user_transactions(self,userid):
@@ -74,7 +76,25 @@ class DatabaseDriver(object):
                 "sender_id": row[2],
                 "receiver_id": row[3],
                 "amount": row[4],
-                "timestamp": row[5]
+                "timestamp": row[5],
+                "category": row[6]
+            })
+        return transactions
+    def get_transactions_by_category_and_userid(self,userid,category):
+        """
+        Get all transactions by category and user id
+        """
+        cursor = self.conn.execute("SELECT * FROM transaction WHERE (sender_id = ? OR receiver_id = ?) AND category = ?;", (userid, userid, category))
+        transactions = []
+        for row in cursor:
+            transactions.append({
+                "id": row[0],
+                "transaction_name": row[1],
+                "sender_id": row[2],
+                "receiver_id": row[3],
+                "amount": row[4],
+                "timestamp": row[5],
+                "category": row[6]
             })
         return transactions
     def get_userid_by_username(self,username):
@@ -82,6 +102,15 @@ class DatabaseDriver(object):
         Get the userid by username
         """
         cursor = self.conn.execute("SELECT userid FROM user WHERE username = ?;", (username,))
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+        return None
+    def get_id_by_userid(self,userid):
+        """
+        Get the userid by id
+        """
+        cursor = self.conn.execute("SELECT id FROM user WHERE userid = ?;", (userid,))
         row = cursor.fetchone()
         if row:
             return row[0]
@@ -111,12 +140,12 @@ class DatabaseDriver(object):
             return {"id": row[0], "name": row[2], "username": row[3], "balance": row[4]}
         return None 
     
-    def insert_user_table(self, name, username, balance=0):
+    def insert_user_table(self, name, username, balance=0, initial_balance=0):
         """
         Using SQL, insert user into user table
         """
-        userid = os.urandom(32).hex() #generate a random 16 byte string and convert it to hex
-        cursor = self.conn.execute("INSERT INTO user (name, username, balance,userid) VALUES (?, ?, ?,?);", (name, username, balance,userid))
+        userid = os.urandom(32).hex() #generate a random 32 byte string and convert it to hex
+        cursor = self.conn.execute("INSERT INTO user (name, username, balance,userid, initial_balance) VALUES (?, ?, ?,?);", (name, username, balance,userid, initial_balance))
         self.conn.commit() #commits the changes we made to the table (because we made a change to the data)
         #returns the id of the row we just created
         return cursor.lastrowid
@@ -134,6 +163,13 @@ class DatabaseDriver(object):
             Using SQL, update a user by id
             """
             self.conn.execute("UPDATE user SET balance = ? WHERE id = ?;", (balance, id))
+            #whenever changing something have to commit but not when reading something 
+            self.conn.commit()
+    def update_user_initial_balance_by_id(self, initial_balance, id):
+            """
+            Using SQL, update a user by id
+            """
+            self.conn.execute("UPDATE user SET initial_balance = ? WHERE id = ?;", (initial_balance, id))
             #whenever changing something have to commit but not when reading something 
             self.conn.commit()
 
