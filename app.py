@@ -141,7 +141,7 @@ def budgetting_advanced(id):
         return failure_response("Unauthorized", 401)
     balance = DB.get_user_by_id(id).get("balance")
     return json.dumps({"Housing (25-30%)": str(int(balance*0.25))+"to"+str(int(balance*0.30)),"Insurance (10-20%)":str(int(balance*0.1))+"to"+str(int(balance*0.20)),
-                       "Food (10-15%)":str(int(balance*0.10))+"to"+str(int(balance*0.15)),"Savings (10-15%)":str(int(balance*0.10))+"to"+str(int(balance*0.15)),"Transportation (10-15%)":str(int(balance*0.10))+"to"+str(int(balance*0.15))
+                       "Food (10-15%)":str(int(balance*0.10))+"to"+str(int(balance*0.15)),"Savings (10-15%)":str(int(balance*0.10))+"to"+str(int(balance*0.15)),"Transportation (10-15%)":str(int(balance*0.10))+"to"+str(int(balance*0.15)),
                        "Personal (5-10%)":str(int(balance*0.05))+"to"+str(int(balance*0.10)), "Recreation (5-10%)":str(int(balance*0.05))+"to"+str(int(balance*0.10)), "Utilities (5-10%)":str(int(balance*0.05))+"to"+str(int(balance*0.10)),"Giving (1-5%)":str(int(balance*0.01))+"to"+str(int(balance*0.05))}), 200
 
 
