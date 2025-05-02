@@ -32,7 +32,7 @@ class DatabaseDriver(object):
         self.conn.execute("""
         CREATE TABLE IF NOT EXISTS user (
                           id INTEGER PRIMARY KEY AUTOINCREMENT,
-                          userid TEXT NOT NULL,
+                          userid TEXT UNIQUE NOT NULL,
                           name TEXT NOT NULL, 
                           username TEXT NOT NULL,
                           balance DOUBLE NOT NULL
@@ -61,7 +61,23 @@ class DatabaseDriver(object):
         """, (sender_id, receiver_id, amount))
         self.conn.commit()
         return cursor.lastrowid
-    def get_userid_by_username():
+    def get_all_user_transactions(self,userid):
+        """
+        Get all transactions from the transaction table
+        """
+        cursor = self.conn.execute("SELECT * FROM transaction WHERE sender_id = ? OR receiver_id = ?;", (userid, userid))
+        transactions = []
+        for row in cursor:
+            transactions.append({
+                "id": row[0],
+                "transaction_name": row[1],
+                "sender_id": row[2],
+                "receiver_id": row[3],
+                "amount": row[4],
+                "timestamp": row[5]
+            })
+        return transactions
+    def get_userid_by_username(self,username):
         """
         Get the userid by username
         """
@@ -75,6 +91,7 @@ class DatabaseDriver(object):
         Deleting user table using SQL
         """
         self.conn.execute("DROP TABLE IF EXISTS user;")
+        self.conn.commit()
     def get_all_users(self):
         """
         Using SQL, returns all users in table
@@ -82,23 +99,24 @@ class DatabaseDriver(object):
         cursor = self.conn.execute("SELECT * FROM user;") #how to run a SQL query 
         users = []
         for row in cursor: 
-            users.append({"id":row[0], "name": row[1], "username": row[2]})
+            users.append({"userid": row[1] , "name": row[2], "username": row[3]})
         return users
     
-    def get_user_by_id(self, id):
+    def get_user_by_id(self, userid):
         """
         Using SQL, getting a user by id
         """
-        cursor = self.conn.execute("SELECT * FROM user WHERE id = ?;", (id,))
+        cursor = self.conn.execute("SELECT * FROM user WHERE userid = ?;", (userid,))
         for row in cursor:
-            return {"id": row[0], "name": row[1], "username": row[2], "balance": row[3]}
+            return {"id": row[0], "name": row[2], "username": row[3], "balance": row[4]}
         return None 
     
     def insert_user_table(self, name, username, balance=0):
         """
         Using SQL, insert user into user table
         """
-        cursor = self.conn.execute("INSERT INTO user (name, username, balance) VALUES (?, ?, ?);", (name, username, balance))
+        userid = os.urandom(32).hex() #generate a random 16 byte string and convert it to hex
+        cursor = self.conn.execute("INSERT INTO user (name, username, balance,userid) VALUES (?, ?, ?,?);", (name, username, balance,userid))
         self.conn.commit() #commits the changes we made to the table (because we made a change to the data)
         #returns the id of the row we just created
         return cursor.lastrowid
