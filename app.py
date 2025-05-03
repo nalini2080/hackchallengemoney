@@ -130,9 +130,10 @@ def budgetting_simple(id):
         return failure_response("Unauthorized", 401)
     balance = DB.get_user_by_id(id).get("balance")
     return json.dumps({"needs": int(balance*0.5),"wants":int(balance*0.3),"savings":int(balance*0.2)}), 200
-@app.route("/api/budgeting/advanced/<int:id>/", methods=["POST"])
-def budgetting_advanced(id):
-    global initial_balance
+@app.route("/api/budgeting/advanced/<string:userid>/", methods=["POST"])
+def budgetting_advanced(userid):
+    id = DB.get_id_by_userid(userid)
+    initial_balance = DB.get_user_by_id(id).get("initial_balance")
     """
     Advanced budgeting
     """
@@ -234,7 +235,8 @@ def get_budgeting_tracking(userid):
     Gets all transactions by user id and returns all categories where budget was exceeded, including by how much.
     """
     global categories
-    global initial_balance
+    id = DB.get_id_by_userid(userid)
+    initial_balance = DB.get_user_by_id(id).get("initial_balance")
     global percentages  # assuming percentages aligns with categories
 
     exceeded_categories = []
