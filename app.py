@@ -51,7 +51,7 @@ def extra_users():
     #(optional) Getting all users (without balances) and user creation with password and hashing
     if request.method == 'GET':
         #Returns all users in table
-        return success_response({"users":DB.get_all_user()})
+        return success_response({"users":DB.get_all_users()})
     if request.method == 'POST':
         #Creating user with name,username,balance, and password enforced
         body = json.loads(request.data)
@@ -69,6 +69,7 @@ def extra_users():
         user = DB.get_user_by_id(user_id)
         if user is None:
             return failure_response("Something went wrong", 500)
+        return success_response(user, 201)
 # Get user by ID
 @app.route("/api/user/<int:id>/", methods=["POST","DELETE"])
 def extra_users_by_id(id):
@@ -85,6 +86,8 @@ def extra_users_by_id(id):
         return success_response(DB.get_user_by_id(id),200)
     if request.method == 'DELETE':
         #Delete user by id
+        body = json.loads(request.data)
+        password = body.get("password")
         if DB.get_user_by_id(id) is None:
             return failure_response("No user found",404)
         if sha256_with_salt(password,salt) != DB.get_user_password(id)[0]:
@@ -102,8 +105,13 @@ def send_money():
     body = json.loads(request.data)
     sender_username = body["sender_username"]
     receiver_username = body["receiver_username"]
+    password = body["password"]
     sender_id = DB.get_userid_by_username(sender_username)
     receiver_id = DB.get_userid_by_username(receiver_username)
+    send_id = DB.get_id_by_userid(sender_id)
+    recev_id = DB.get_id_by_userid(receiver_id)
+    sender = DB.get_user_by_id(sender_id)
+    receiver = DB.get_user_by_id(receiver_id)
     amount = body["amount"]
     if sender_id is None:
         return json.dumps({"error": "Sender is none"}), 400
@@ -111,10 +119,14 @@ def send_money():
         return json.dumps({"error": "receiver is none"}), 400
     if amount is None:
         return json.dumps({"error": "amount is none"}), 400
-    if amount > sender_id.get("balance"):
+    if amount > sender.get("balance"):
         return json.dumps({"error": "Insufficient funds to complete send request"}), 400
-    DB.update_user_by_id(sender_id.get("balance")-amount, sender_id)
-    DB.update_user_by_id(receiver_id.get("balance")+amount, receiver_id)
+    if DB.get_user_by_id(send_id) is None or DB.get_user_by_id(recev_id) is None:
+        return failure_response("No user found",404)
+    if sha256_with_salt(password,salt) != DB.get_user_password(send_id)[0]:
+        return failure_response("Unauthorized", 401)
+    DB.update_user_by_id(sender.get("balance")-amount, sender_id)
+    DB.update_user_by_id(receiver.get("balance")+amount, receiver_id)
     return json.dumps(body), 200
 
 @app.route("/api/budgeting/simple/<int:id>/", methods=["POST"])
@@ -126,7 +138,7 @@ def budgetting_simple(id):
     password = body["password"]
     if DB.get_user_by_id(id) is None:
         return failure_response("No user found",404)
-    if sha256_with_salt(password,salt) != DB.get_user_password(id)[0]:
+    if sha256_with_salt(password,salt) != DB.get_user_password_by_id(id)[0]:
         return failure_response("Unauthorized", 401)
     balance = DB.get_user_by_id(id).get("balance")
     return json.dumps({"needs": int(balance*0.5),"wants":int(balance*0.3),"savings":int(balance*0.2)}), 200
@@ -141,7 +153,7 @@ def budgetting_advanced(userid):
     password = body["password"]
     if DB.get_user_by_id(id) is None:
         return failure_response("No user found",404)
-    if sha256_with_salt(password,salt) != DB.get_user_password(id)[0]:
+    if sha256_with_salt(password,salt) != DB.get_user_password_by_id(id)[0]:
         return failure_response("Unauthorized", 401)
     balance = DB.get_user_by_id(id).get("balance")
     return json.dumps({"Housing (25-30%)": str(int(initial_balance*0.25))+"to"+str(int(initial_balance*0.30)),"Insurance (10-20%)":str(int(initial_balance*0.1))+"to"+str(int(initial_balance*0.20)),
@@ -171,18 +183,17 @@ def transactions():
         return json.dumps({"error": "transaction name needed"}), 400
     if category is None or category not in ["Housing", "Insurance", "Food", "Savings", "Transportation", "Personal", "Recreation", "Utilities", "Giving", "Other"]:
         return json.dumps({"error": "category is none or not in list"}), 400
-    DB.insert_transaction(sender_id, receiver_id, amount, category)
+    DB.insert_transaction(transaction_name,sender_id, receiver_id, amount, category)
     return json.dumps(body), 200
 @app.route("/api/set-initial-balance/<string:userid>", methods=["POST"])
 def set_initial_balance(userid):
-    global initial_balance
     body = json.loads(request.data)
     password = body["password"]
     balance = body.get("initial_balance")
     id = DB.get_id_by_userid(userid)
     if DB.get_user_by_id(id) is None:
         return failure_response("No user found",404)
-    if sha256_with_salt(password,salt) != DB.get_user_password(id)[0]:
+    if sha256_with_salt(password,salt) != DB.get_user_password_by_id(id)[0]:
         return failure_response("Unauthorized", 401)
     if balance is None:
         return failure_response("initial_balance is required", 400)
@@ -196,22 +207,12 @@ def set_initial_balance(userid):
         return failure_response("initial_balance is required", 400)
     DB.update_user_initial_balance_by_id(id, initial_balance)
     return success_response({"message": f"Initial balance set to {initial_balance}"}, 200)
-
-    
-    
-    return success_response({"message": f"Initial balance set to {initial_balance}"}, 200)
 @app.route("/api/transactions/<string:userid>/", methods=["GET"])
 def get_transactions_by_user_id(userid):
     """
     Gets all transactions by user id
     """
-    body = json.loads(request.data)
-    password = body["password"]
     id = DB.get_id_by_userid(userid)
-    if DB.get_user_by_id(id) is None:
-        return failure_response("No user found",404)
-    if sha256_with_salt(password,salt) != DB.get_user_password(id)[0]:
-        return failure_response("Unauthorized", 401)
     transactions = DB.get_all_user_transactions(id)
     return json.dumps(transactions), 200
 
@@ -220,12 +221,12 @@ def get_transactions_by_category_and_user_id(userid, category):
     """
     Gets all transactions by user id and category
     """
-    id = DB.get_userid_by_user(userid)
+    id = DB.get_id_by_userid(userid)
     body = json.loads(request.data)
     password = body["password"]
     if DB.get_user_by_id(id) is None:
         return failure_response("No user found",404)
-    if sha256_with_salt(password,salt) != DB.get_user_password(id)[0]:
+    if sha256_with_salt(password,salt) != DB.get_user_password_by_id(id)[0]:
         return failure_response("Unauthorized", 401)
     transactions = DB.get_transactions_by_category_and_userid(userid, category)
     return json.dumps(transactions), 200
@@ -277,61 +278,6 @@ def get_budgeting_tracking(userid):
 
 #new methods
 # Get total amount 
-
-"""
-
-Request:
-
-
-"""
-@app.route("/api/user/<int:user_id>/", methods=["GET"])
-def get_total_amount(user_id):
-    """
-    Gets total amount of money
-    """
-    user = DB.get_user_by_id(user_id)
-    if user is None:
-        return json.dumps({"error": "User is not found!"}), 404
-    body = json.loads(request.data)
-    amount = body["amount"]
-    return json.dumps(body), 200
-
-
-@app.route("/api/subtract/", methods=["POST"])
-def subtract_expenses():
-    """
-    Subtracts expenses from total
-    """
-    body = json.loads(request.data)
-    expense = body["expense"]
-    user_id = body["user_id"]
-    amount = body["amount"]
-    user = DB.get_user_by_id(user_id)
-    if user is None:
-        return json.dumps({"error": "receiver is none"}), 400
-    if amount is None:
-        return json.dumps({"error": "amount is none"}), 400
-    DB.update_user_by_id(user.get("balance")-amount, user)
-    return json.dumps(body), 200
-
-
-@app.route("/api/subtract/", methods=["POST"])
-def add_salary():
-    """
-    Subtracts expenses from total
-    """
-    body = json.loads(request.data)
-    salary = body["expense"]
-    user_id = body["user_id"]
-    amount = body["amount"]
-    user = DB.get_user_by_id(user_id)
-    if user is None:
-        return json.dumps({"error": "receiver is none"}), 400
-    if amount is None:
-        return json.dumps({"error": "amount is none"}), 400
-    DB.update_user_by_id(user.get("balance")+amount, user)
-    return json.dumps(body), 200
-
 
 
 
